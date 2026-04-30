@@ -1,0 +1,89 @@
+**SECUREXIA --- Modèle de données V2 (aligné Rapport Commission)**
+
+Date : 2026-03-02 \| Objectif : structurer toutes les sections
+obligatoires du rapport
+
+## 1. Entités principales
+
+-   Client (tenant) : collectivité ou business local
+
+-   ERP : établissement recevant du public
+
+-   Visite : pré‑visite / commission
+
+-   Participant : personnes présentes (commission, exploitant,
+    techniciens...)
+
+-   ChecklistItem : item de contrôle rattaché à une section officielle
+
+-   Anomalie : constat NOK qualifié (mineure/majeure) + preuves
+
+-   Prescription / Action : mesures à réaliser + délais + statut
+
+-   DocumentLink : lien SharePoint + métadonnées + version
+
+-   DocRegCheck : contrôle de complétude documentaire (registre,
+    attestations...)
+
+-   Avis : avis global + réserves
+
+## 2. Tables proposées (résumé)
+
+-   clients : id, type (collectivite\|business), nom,
+    sharepoint_root_url, created_at
+
+-   users : id, client_id, email, role (consultant\|admin\|lecteur),
+    created_at
+
+-   erp : id, client_id, code_erp, nom, type_erp, categorie, effectif,
+    adresse, exploitant_nom, proprietaire_nom, sharepoint_folder_url
+
+-   visites : id, erp_id, type (previsite\|commission), motif,
+    date_visite, resume, created_by
+
+-   participants : id, visite_id, role, nom, organisme, contact
+
+-   doc_reg_check : id, visite_id, registre_present, registre_a_jour,
+    attest_elec, attest_gaz, maintenance_ssi, plans, autres, commentaire
+
+-   checklist_items : id, visite_id, section_officielle, rubrique,
+    exigence, statut (OK\|NOK\|NA), gravite (1-3), commentaire
+
+-   anomalies : id, visite_id, categorie, niveau (mineure\|majeure),
+    description, risque, preuve_doc_id?
+
+-   prescriptions : id, visite_id, description, delai, responsable,
+    priorite, statut
+
+-   documents : id, erp_id, type_document, titre, url_sharepoint,
+    date_document, version, auteur
+
+-   avis : id, visite_id, avis_global, commentaire, conclusion
+
+## 3. Règles de validation (commission)
+
+-   Impossible de générer le rapport commission si : identification ERP
+    incomplète (nom/adresse/exploitant).
+
+-   Participants : au moins 1 participant \'Exploitant\' + 1
+    \'Commission/Consultant\' selon contexte.
+
+-   DocRegCheck : statut explicite (Oui/Non/NA) sur les pièces minimales
+    (registre, attestations...).
+
+-   Checklist : sections officielles au minimum remplies (évacuation,
+    moyens secours, SSI, installations, accessibilité --- selon type
+    ERP).
+
+-   Avis global obligatoire + liste prescriptions si avis avec réserves.
+
+## 4. Génération documentaire
+
+-   Deux exports : (1) Rapport pré‑visite (technique) (2) Rapport
+    commission (officiel).
+
+-   Le rapport commission doit suivre strictement les blocs imposés ;
+    texte libre limité aux commentaires.
+
+-   Chaque prescription exportée doit correspondre à une ligne de
+    prescriptions (et donc une action).

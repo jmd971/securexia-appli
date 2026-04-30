@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ═══ MULTI-TENANT ═══
+
+model Client {
+  id                String     @id @default(cuid())
+  type              ClientType
+  nom               String
+  siret             String?
+  sharepointRootUrl String?    @map("sharepoint_root_url")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+  users             User[]
+  erps              Erp[]
+  @@map("clients")
+}
+
+enum ClientType {
+  collectivite
+  business
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clientId  String   @map("client_id")
+  email     String   @unique
+  nom       String
+  role      UserRole @default(lecteur)
+  authId    String?  @unique @map("auth_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  visites   Visite[] @relation("CreatedBy")
+  @@index([clientId])
+  @@map("users")
+}
+
+enum UserRole {
+  consultant
+  admin
+  lecteur
+}
+
+// ═══ ERP ═══
+
+model Erp {
+  id              String     @id @default(cuid())
+  clientId        String     @map("client_id")
+  codeErp         String     @map("code_erp")
+  nom             String
+  typeErp         String     @map("type_erp")
+  categorie       String
+  effectif        Int
+  natureActivite  String?    @map("nature_activite")
+  adresse         String
+  commune         String
+  proprietaireNom String?    @map("proprietaire_nom")
+  exploitantNom   String     @map("exploitant_nom")
+  telephone       String?
+  email           String?
+  conformite      Float?     @default(0)
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  client          Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  visites         Visite[]
+  documents       Document[]
+  @@unique([clientId, codeErp])
+  @@index([clientId])
+  @@map("erps")
+}
+
+// ═══ VISITES ═══
+
+model Visite {
+  id             String         @id @default(cuid())
+  erpId          String         @map("erp_id")
+  type           VisiteType
+  motif          String?
+  dateVisite     DateTime?      @map("date_visite")
+  heure          String?
+  statut         VisiteStatut   @default(brouillon)
+  resume         String?
+  createdBy      String?        @map("created_by")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  erp            Erp            @relation(fields: [erpId], references: [id], onDelete: Cascade)
+  creator        User?          @relation("CreatedBy", fields: [createdBy], references: [id])
+  participants   Participant[]
+  docRegCheck    DocRegCheck?
+  checklistItems ChecklistItem[]
+  anomalies      Anomalie[]
+  prescriptions  Prescription[]
+  avis           Avis?
+  signatures     Signature[]
+  @@index([erpId])
+  @@map("visites")
+}
+
+enum VisiteType {
+  previsite
+  commission
+}
+
+enum VisiteStatut {
+  brouillon
+  en_cours
+  valide
+  cloture
+}
+
+// ═══ PARTICIPANTS (§4) ═══
+
+model Participant {
+  id        String         @id @default(cuid())
+  visiteId  String         @map("visite_id")
+  categorie ParticipantCat
+  nom       String
+  role      String?
+  organisme String?
+  contact   String?
+  visite    Visite         @relation(fields: [visiteId], references: [id], onDelete: Cascade)
+  @@index([visiteId])
+  @@map("participants")
+}
+
+enum ParticipantCat {
+  commission
+  etablissement
+}
+
+// ═══ DOCUMENTS RÉGLEMENTAIRES (§5) ═══
+
+model DocRegCheck {
+  id                String   @id @default(cuid())
+  visiteId          String   @unique @map("visite_id")
+  registrePresent   Boolean? @map("registre_present")
+  registreAJour     Boolean? @map("registre_a_jour")
+  attestElectricite String?  @map("attest_electricite")
+  attestGaz         String?  @map("attest_gaz")
+  attestAscenseurs  String?  @map("attest_ascenseurs")
+  attestExtincteurs String?  @map("attest_extincteurs")
+  attestSsi         String?  @map("attest_ssi")
+  attestDesenfumage String?  @map("attest_desenfumage")
+  plansIntervention String?  @map("plans_intervention")
+  commentaire       String?
+  visite            Visite   @relation(fields: [visiteId], references: [id], onDelete: Cascade)
+  @@map("doc_reg_checks")
+}
+
+// ═══ CHECKLIST (§6) ═══
+
+model ChecklistItem {
+  id                String  @id @default(cuid())
+  visiteId          String  @map("visite_id")
+  sectionOfficielle String  @map("section_officielle")
+  rubrique          String
+  statut            String?
+  gravite           Int?    @default(1)
+  commentaire       String?
+  ordreAffichage    Int     @default(0) @map("ordre_affichage")
+  visite            Visite  @relation(fields: [visiteId], references: [id], onDelete: Cascade)
+  @@index([visiteId])
+  @@map("checklist_items")
+}
+
+// ═══ ANOMALIES (§7) ═══
+
+model Anomalie {
+  id          String         @id @default(cuid())
+  visiteId    String         @map("visite_id")
+  categorie   String?
+  niveau      AnomalieNiveau
+  description String
+  risque      String?
+  preuveDocId String?        @map("preuve_doc_id")
+  visite      Visite         @relation(fields: [visiteId], references: [id], onDelete: Cascade)
+  @@index([visiteId])
+  @@map("anomalies")
+}
+
+enum AnomalieNiveau {
+  mineure
+  majeure
+}
+
+// ═══ PRESCRIPTIONS (§9) ═══
+
+model Prescription {
+  id          String             @id @default(cuid())
+  visiteId    String             @map("visite_id")
+  description String
+  delai       String?
+  echeance    DateTime?
+  responsable String?
+  priorite    PrescriptionPrio   @default(moyenne)
+  statut      PrescriptionStatut @default(a_faire)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  visite      Visite             @relation(fields: [visiteId], references: [id], onDelete: Cascade)
+  @@index([visiteId])
+  @@index([statut])
+  @@map("prescriptions")
+}
+
+enum PrescriptionPrio {
+  basse
+  moyenne
+  haute
+  critique
+}
+
+enum PrescriptionStatut {
+  a_faire
+  en_cours
+  fait
+  en_retard
+}
+
+// ═══ AVIS (§8) ═══
+
+model Avis {
+  id          String  @id @default(cuid())
+  visiteId    String  @unique @map("visite_id")
+  avisGlobal  String  @map("avis_global")
+  commentaire String?
+  motifs      String?
+  visite      Visite  @relation(fields: [visiteId], references: [id], onDelete: Cascade)
+  @@map("avis")
+}
+
+// ═══ SIGNATURES (§10) ═══
+
+model Signature {
+  id        String  @id @default(cuid())
+  visiteId  String  @map("visite_id")
+  role      String
+  nom       String?
+  imageData String? @map("image_data")
+  visite    Visite  @relation(fields: [visiteId], references: [id], onDelete: Cascade)
+  @@unique([visiteId, role])
+  @@map("signatures")
+}
+
+// ═══ DOCUMENTS GED ═══
+
+model Document {
+  id            String    @id @default(cuid())
+  erpId         String    @map("erp_id")
+  typeDocument  String    @map("type_document")
+  titre         String
+  urlSharepoint String?   @map("url_sharepoint")
+  dateDocument  DateTime? @map("date_document")
+  version       String?
+  auteur        String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  erp           Erp       @relation(fields: [erpId], references: [id], onDelete: Cascade)
+  @@index([erpId])
+  @@map("documents")
+}
+
+// ═══ AUDIT LOG ═══
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  action    String
+  entite    String
+  entiteId  String?  @map("entite_id")
+  details   Json?
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([userId])
+  @@index([entite, entiteId])
+  @@map("audit_logs")
+}
